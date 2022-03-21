@@ -7,7 +7,8 @@ import shutil
 from dataclasses import dataclass
 
 @dataclass
-class Node:
+class SensorNode:
+    nodeIdx: int
     serial: str
 
     def requestAndGetSerialData(self, reqMessage):
@@ -60,6 +61,10 @@ class Node:
         else:
             print("Response waiting timeout (60 seconds)")
 
+
+
+
+
     def parseSerialInConfigData(self, serialInString):
         @dataclass
         class sensor:
@@ -73,6 +78,7 @@ class Node:
         return sensors
 
     def inputNewConfigFromUser(self, sensors):
+        print()
         userInString = ""
         while ((userInString != "Y") and (userInString != "N")):
             for i, sensor in enumerate(sensors):
@@ -80,9 +86,12 @@ class Node:
             print("Select the sensor to enable/disable (enter the number).")
             print("After finished, enter Y to keep changes,")
             userInString = input("or enter N to cancel all changes.\n")
-            if (userInString.isnumeric()):
-                idx = int(userInString) - 1
-                sensors[idx].isEnabled = int(not sensors[idx].isEnabled)
+            if userInString.isnumeric():
+                if int(userInString)-1 > 0 and int(userInString)-1 < len(sensors):
+                    idx = int(userInString) - 1
+                    sensors[idx].isEnabled = int(not sensors[idx].isEnabled)
+                else:
+                    print("Number out of range")
         return userInString, sensors
 
     def configurationMain(self):
@@ -101,9 +110,13 @@ class Node:
                 newConfigOutString += str(sensor.isEnabled) + ";"
             newConfigOutString += "\n"
             self.sendChanges(newConfigOutString)
-        elif (userInString == 'N'):
+        else:
             self.cancelChanges()
             print("Value changes not saved")
+
+
+
+
 
     def parseSerialInCalibData(self, sensorsString):
         @dataclass
@@ -128,13 +141,14 @@ class Node:
         return sensors
 
     def inputNewCalibFromUser(self, sensors):
+        print()
         userInString = ""
         while ((userInString != "Y") and (userInString != "N")):
             for i, sensor in enumerate(sensors):
                 if i > 0:
                     print(", ", end = "")
                 print(str(i+1) + ". " + sensor.sensorName, end = "")
-            print("")
+            print()
             print("Select the sensor to calibrate manually (enter the number).")
             print("After finished, enter N to cancel all changes,")
             userInString = input("or enter Y to save all changes.\n")
@@ -182,9 +196,13 @@ class Node:
                     calibDataString += str(y.value) + ","
                 calibDataString += ";"
             self.sendChanges(calibDataString)
-        elif (userInString == "N"):
+        else:
             self.cancelChanges()
             print("Value changes not saved")
+
+
+
+
 
     def parseSerialInSensorData(self, serialInString):
         @dataclass
@@ -214,12 +232,14 @@ class Node:
                 TSS = round(float(sen.value)*0.123*1000 - 41.593, 2)
                 print("Calculated TSS from EC: " + str(TSS) + " mg/L")
                 data.append(str(TSS))
+        names.insert(0, "Date")
+        data.insert(0, time.strftime("%d/%m/%Y", time.localtime()))
         return names, data
 
     def saveSensorDataToCSV(self, names, data):
         try:
-            fileName = "sensor_data.csv"
-            newFileName = "previous_sensor_data.csv"
+            fileName = "sensor_node_" + str(self.nodeIdx+1) + "_data.csv"
+            newFileName = "previous_sensor_node_" + str(self.nodeIdx+1) + "_data.csv"
             file = open(fileName, 'a+', newline = '')
             writer = csv.writer(file)
             if os.stat(fileName).st_size == 0:
@@ -235,7 +255,7 @@ class Node:
                     file_no = 0
                     while (os.path.exists(newFileName)):
                         file_no += 1
-                        newFileName = "previous_sensor_data_" + str(file_no) + ".csv"
+                        newFileName = "previous_sensor_node_" + str(self.nodeIdx+1) + "_data_" + str(file_no) + ".csv"
                     shutil.copyfile(fileName, newFileName)
                     file = open(fileName, 'w+', newline = '')
                     writer = csv.writer(file)
