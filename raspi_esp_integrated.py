@@ -109,20 +109,15 @@ def guardFunctionWithLockAndPin(idx, guardedFunction):
 
 def sensorDataProcessAndSaveToCSVTask(lock):
     DATA_REQUEST_INTERVAL = 60
-    timepoints = []
-    timepoints.append(time.time() - DATA_REQUEST_INTERVAL)
-    if isNodeEnabledList[0]:
-        timepoints.append(timepoints[0] + DATA_REQUEST_INTERVAL/2)
-    else:
-        timepoints.append(time.time() - DATA_REQUEST_INTERVAL)
+    timepoint = time.time() - DATA_REQUEST_INTERVAL
     while(1):
-        for i, node in enumerate(nodes):
-            if not isNodeEnabledList[i]:
-                continue
-            if (time.time() - timepoints[i] > DATA_REQUEST_INTERVAL):
+        if (time.time() - timepoint > DATA_REQUEST_INTERVAL):
+            for i, node in enumerate(nodes):
+                if not isNodeEnabledList[i]:
+                    continue
                 guardFunctionWithLockAndPin(i, node.sensorDataProcessAndSaveToCSVMain)
-                timepoints[i] = time.time()
-                printCommandGuide()
+            timepoint = time.time()
+            printCommandGuide()
 lock = threading.Lock()
 threading.Thread(target=sensorDataProcessAndSaveToCSVTask, args=(lock,)).start()
 
