@@ -6,6 +6,8 @@ import threading
 import csv
 import os
 from sensorNode import SensorNode
+from watchdog.observers import Observer
+from watchdog.events import PatternMatchingEventHandler
 
 def readNodesConfigFromCSV():
     fileName = "sensor_nodes_config.csv"
@@ -87,7 +89,7 @@ nodes = [SensorNode(0, serials[0]), SensorNode(1, serials[1])]
 
 def printCommandGuide():
     print()
-    print("Please enter command")
+    print("Please enter command:")
     if isNodeEnabledList[0]:
         print("CALIB1: Calibrate sensors in node 1")
         print("CONFIG1: Configure sensors in node 1")
@@ -107,6 +109,38 @@ def guardFunctionWithLockAndPin(idx, guardedFunction):
         time.sleep(0.5)
         lock.release()
 
+def startWebServerWatchDog():
+    path = "./"
+    def on_created_or_modified(event):
+        global isNodeEnabledList
+        if event.src_path == path + "sensor_nodes_config.csv":
+            lock.acquire()
+            isNodeEnabledList = readNodesConfigFromCSV()
+            print()
+            print("Sensor nodes config changed from WebServer")
+            printCommandGuide()
+            lock.release()
+        elif event.src_path == path + "Calib.csv":
+            nodeIdx = 0
+            def guardedFunction():
+                global nodeIdx
+                with open("Calib.csv", 'r') as file:
+                    reader = csv.reader(file)
+                    for calibRow in reader:
+                        pass
+                    print(calibRow)
+                    nodeIdx = int(calibRow[0])-1
+                    nodes[nodeIdx].calibrationMain(calibRow)
+                    print("Calibrated from WebServer")
+                    printCommandGuide()
+            guardFunctionWithLockAndPin(nodeIdx, guardedFunction)
+    event_handler = PatternMatchingEventHandler(patterns=["sensor_nodes_config.csv", "Calib.csv"])
+    event_handler.on_created = on_created_or_modified
+    event_handler.on_modified = on_created_or_modified
+    observer = Observer()
+    observer.schedule(event_handler, path)
+    observer.start()
+
 def sensorDataProcessAndSaveToCSVTask(lock):
     DATA_REQUEST_INTERVAL = 60
     timepoint = time.time() - DATA_REQUEST_INTERVAL
@@ -120,20 +154,19 @@ def sensorDataProcessAndSaveToCSVTask(lock):
             printCommandGuide()
 lock = threading.Lock()
 threading.Thread(target=sensorDataProcessAndSaveToCSVTask, args=(lock,)).start()
+startWebServerWatchDog()
 
 while (1):
-    userInString = ""
-    while (1):
-        userInString = input()
-        for i,node in enumerate(nodes):
-            if not isNodeEnabledList[i]:
-                continue
-            if userInString == ("CALIB" + str(i+1)):
-                guardFunctionWithLockAndPin(i, node.calibrationMain)
-            if userInString == ("CONFIG" + str(i+1)):
-                guardFunctionWithLockAndPin(i, node.configurationMain)
-        if userInString == "NODE":
-            break
-        printCommandGuide()
-    isNodeEnabledList = configureNodes()
+    userInString = input()
+    for i,node in enumerate(nodes):
+        if not isNodeEnabledList[i]:
+            continue
+        if userInString == ("CALIB" + str(i+1)):
+            guardFunctionWithLockAndPin(i, node.calibrationMain)
+        if userInString == ("CONFIG" + str(i+1)):
+            guardFunctionWithLockAndPin(i, node.configurationMain)
+    if userInString == "NODE":
+        lock.acquire()
+        isNodeEnabledList = configureNodes()
+        lock.release()
     printCommandGuide()

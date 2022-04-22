@@ -87,7 +87,7 @@ class SensorNode:
             print("After finished, enter Y to keep changes,")
             userInString = input("or enter N to cancel all changes.\n")
             if userInString.isnumeric():
-                if int(userInString)-1 > 0 and int(userInString)-1 < len(sensors):
+                if int(userInString)-1 >= 0 and int(userInString)-1 < len(sensors):
                     idx = int(userInString) - 1
                     sensors[idx].isEnabled = int(not sensors[idx].isEnabled)
                 else:
@@ -172,7 +172,7 @@ class SensorNode:
                             + ": " + str(sensors[sensorIdx].parameters[paramIdx].value))
         return userInString, sensors
 
-    def calibrationMain(self):
+    def calibrationMain(self, calibRow=[]):
         print("Making initial calibration data request to ESP32...")
         serialInString = self.requestAndGetSerialData("manualcalib\n")
         """Contoh data: Data#EC:K Value Low (1.413 mS/cm)_1.14,K Value High (2.76 mS/cm or 12.88 mS/cm)_1.00,;
@@ -188,12 +188,29 @@ class SensorNode:
             print("No sensor enabled, please enable at least one")
             return
         sensors = self.parseSerialInCalibData(sensorsString)
-        userInString, sensors = self.inputNewCalibFromUser(sensors)
+        if calibRow == []: #jika bukan dari web server
+            userInString, sensors = self.inputNewCalibFromUser(sensors)
+        else: #masukan dari webserver
+            userInString = "Y"
+            switcher = {
+                "1": "EC",
+                "2": "Tbd",
+                "3": "PH",
+                "4": "NH3-N"
+            }
+            sensorName = switcher.get(calibRow[1])
+            print("Kalibrasi dari webserver: " + sensorName)
+            for sensor in sensors:
+                if sensorName == sensor.sensorName:
+                    for i, parameter in enumerate(sensor.parameters):
+                        parameter.value = float(calibRow[i+2])
+                        print(str(parameter.value) + ",")
+                    break
         if (userInString == "Y"):
             calibDataString = ("newdata:")
-            for x in sensors:
-                for y in x.parameters:
-                    calibDataString += str(y.value) + ","
+            for sensor in sensors:
+                for parameter in sensor.parameters:
+                    calibDataString += str(parameter.value) + ","
                 calibDataString += ";"
             self.sendChanges(calibDataString)
         else:
