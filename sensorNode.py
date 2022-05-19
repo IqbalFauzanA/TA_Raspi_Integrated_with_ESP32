@@ -94,7 +94,7 @@ class SensorNode:
                     print("Number out of range")
         return userInString, sensors
 
-    def configurationMain(self):
+    def configurationMain(self, configRow=[]):
         print("Making config request to ESP32...")
         serialInString = self.requestAndGetSerialData("config\n")
         """Contoh data: Data#EC1;Tbd1;PH1;"""
@@ -103,7 +103,14 @@ class SensorNode:
             return
         self.serial.write(b"initdatareceived\n")
         sensors = self.parseSerialInConfigData(serialInString)
-        userInString, sensors = self.inputNewConfigFromUser(sensors)
+        if configRow == []: #jika bukan dari web server
+            userInString, sensors = self.inputNewConfigFromUser(sensors)
+        else: #masukan dari webserver
+            userInString = "Y"
+            print("Konfigurasi dari webserver: ")
+            for i, sensor in enumerate(sensors):
+                sensor.isEnabled = int(configRow[i+1])
+                print(str(sensor.isEnabled)+",")
         if (userInString == 'Y'):
             newConfigOutString = "newdata:"
             for sensor in sensors:
