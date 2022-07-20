@@ -232,63 +232,63 @@ class SensorNode:
         if not serialInString.startswith("Data#"):
             print("Failed to receive data (invalid format or exceeds 60 seconds timeout)...")
             return
-        names = re.findall("([A-z]+):", serialInString)
-        values = re.findall(":([-.:0-9]+)\s", serialInString)  # parsing using regex
-        units = re.findall("([A-z/\s]+);", serialInString)
+        serialInString = serialInString.lstrip("Data#")
+        names = re.findall("([A-z][A-z0-9]+):", serialInString)
+        values = re.findall(":([-.:0-9A-z]+)\s", serialInString)  # parsing using regex
+        units = re.findall("([A-z/]*);", serialInString)
         for i, value in enumerate(values):
-            print(names[i] + ":", values[i] + units[i], sep = " ")
+            if values[i] == "nan":
+                values[i] = ''
+                continue
+            print(names[i] + ": " + values[i] + " " + units[i])
             if i < 2:
                 continue
-            if (names[i] == "EC"):
+            if names[i] == "EC":
                 TSS = round(float(values[i])*0.123*1000 - 41.593, 2)
                 print("Calculated TSS from EC")
                 names.insert(i+1, "TSS")
                 values.insert(i+1, str(TSS))
-                units.insert(i+1, "mg/L")
+                units.insert(i+1, " mg/L")
             safeLimitSwitcher = {
                 "PH": 9.0,
                 "TSS": 45.0,
-                "NH3-N": 8.0
+                "NH3N": 8.0
             }
             safeLimit = safeLimitSwitcher.get(names[i])
+            if safeLimit is None:
+                continue
             if float(values[i]) > safeLimit:
                 print("WARNING!!! " + names[i] + " EXCEEDS SAFE LIMIT!")
         names.insert(0, "Date")
         values.insert(0, time.strftime("%d/%m/%Y", time.localtime()))
+        names.insert(2, "Id")
+        values.insert(2, self.nodeIdx+1)
         return names, values
+
 
     def saveSensorDataToCSV(self, names, data):
         try:
-            fileName = "sensor_node_" + str(self.nodeIdx+1) + "_data.csv"
-            newFileName = "previous_sensor_node_" + str(self.nodeIdx+1) + "_data.csv"
+            fileName = os.path.join(sys.path[0], "data.csv")
             file = open(fileName, 'a+', newline = '')
             writer = csv.writer(file)
             if os.stat(fileName).st_size == 0:
                 writer.writerow(names)
-            else:
-                file.seek(0)
-                reader = csv.reader(file)
-                rows = []
-                for row in reader:
-                    rows.append(row)
-                if (rows[0] != names):
-                    file.close()
-                    file_no = 0
-                    while (os.path.exists(newFileName)):
-                        file_no += 1
-                        newFileName = "previous_sensor_node_" + str(self.nodeIdx+1) + "_data_" + str(file_no) + ".csv"
-                    shutil.copyfile(fileName, newFileName)
-                    file = open(fileName, 'w+', newline = '')
-                    writer = csv.writer(file)
-                    writer.writerow(names)
             writer.writerow(data)
             print("Requested data has been saved to " + fileName)
         finally:
             file.close()
 
+
     def sensorDataProcessAndSaveToCSVMain(self):
-        print("Making data request to ESP32...")
-        serialInString = self.requestAndGetSerialData(time.strftime("%H:%M\n", time.localtime()))
-        """Contoh data: Data#Time:00:17 ;Temperature:-127.00 ;EC:-1.64 mS/cm;Tbd:2744.13 NTU;"""
-        names, data = self.parseSerialInSensorData(serialInString)
-        self.saveSensorDataToCSV(names, data)
+        isDataValid = 0
+        while not isDataValid:
+            try:
+                print()
+                print("Making data request to sensor node " + str(self.nodeIdx+1))
+                serialInString = self.requestAndGetSerialData(time.strftime("%H:%M\n", time.localtime()))
+                """Contoh data: Data#Time:00:17 ;Temperature:-127.00 ;EC:-1.64 mS/cm;Tbd:2744.13 NTU;"""
+                names, data = self.parseSerialInSensorData(serialInString)
+                self.saveSensorDataToCSV(names, data)
+                isDataValid = 1
+            except:
+                print("Data error, rereading...")

@@ -5,12 +5,13 @@ import time
 import threading
 import csv
 import os
+import sys
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 from sensorNode import SensorNode
 
 # setup GPIO
-REQUEST_TO_ESP_PINS = [35, 37]
+REQUEST_TO_ESP_PINS = [12, 7]
 GPIO.setwarnings(False)
 GPIO.cleanup()
 GPIO.setmode(GPIO.BOARD)
@@ -20,9 +21,15 @@ GPIO.setup(REQUEST_TO_ESP_PINS[1], GPIO.OUT)
 GPIO.output(REQUEST_TO_ESP_PINS[1], GPIO.LOW)
 
 # setup serial
-serials = [serial.Serial('/dev/serial0', 9600, parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, bytesize=serial.EIGHTBITS, timeout=3),
-           serial.Serial('/dev/ttyUSB0', 9600, timeout=3)]
-nodes = [SensorNode(0, serials[0]), SensorNode(1, serials[1])]
+serialDirectories = ['/dev/serial0', '/dev/ttyUSB0']
+serials = []
+nodes = []
+for i, serialDirectory in enumerate(serialDirectories):
+    try:
+        serials.append(serial.Serial(serialDirectory, 9600, parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, bytesize=serial.EIGHTBITS, timeout=3))
+        nodes.append(SensorNode(i, serials[i]))
+    except:
+        print(serialDirectory + " doesn't exist. Node " + str(i+1) + " can't be enabled")
 
 
 def readNodesConfigFromCSV():
@@ -87,7 +94,7 @@ def configureNodes():
     else:
         print("Changes not saved")
     return isNodeEnabledList
-
+isNodeEnabledList = configureNodes()
 
 def printCommandGuide():
     print()
@@ -114,41 +121,39 @@ def guardFunctionWithLockAndPin(idx, guardedFunction):
 
 
 def startWebServerWatchDog():
-    path = "./"
+    path = sys.path[0] + "/"
     def on_created_or_modified(event):
         global isNodeEnabledList
         fileName = event.src_path
-        if fileName == path + "sensor_nodes_config.csv":
+        if fileName == path + "nodes.csv":
             lock.acquire()
             isNodeEnabledList = readNodesConfigFromCSV()
             print()
-            print("Sensor nodes config changed from WebServer")
             lock.release()
-        elif (fileName == path + "Calib.csv") or (fileName == path + "Config.csv"):
-            nodeIdx = 0
+        elif (fileName == path + "calib.csv") or (fileName == path + "config.csv"):
+            with open(fileName, 'r') as file:
+                reader = csv.reader(file)
+                for inRow in reader:
+                    pass
+                print(inRow)
+                nodeIdx = int(inRow[0])-1
             def guardedFunction():
-                global nodeIdx
-                with open(fileName, 'r') as file:
-                    reader = csv.reader(file)
-                    for inRow in reader:
-                        pass
-                    print(inRow)
-                    nodeIdx = int(inRow[0])-1
-                    if fileName == path + "Calib.csv":
-                        nodes[nodeIdx].calibrationMain(inRow)
-                        print("Calibrated from WebServer")
-                    elif fileName == path + "Config.csv":
-                        nodes[nodeIdx].configurationMain(inRow)
-                        print("Configurated from WebServer")
+                if fileName == path + "calib.csv":
+                    nodes[nodeIdx].calibrationMain(inRow)
+                    print("Calibrated from WebServer")
+                elif fileName == path + "config.csv":
+                    nodes[nodeIdx].configurationMain(inRow)
+                    print("Configurated from WebServer")
             guardFunctionWithLockAndPin(nodeIdx, guardedFunction)
         printCommandGuide()
     event_handler = PatternMatchingEventHandler(
-        patterns=["sensor_nodes_config.csv", "Calib.csv", "Config.csv"])
+        patterns=["nodes.csv", "calib.csv", "config.csv"])
     event_handler.on_created = on_created_or_modified
     event_handler.on_modified = on_created_or_modified
     observer = Observer()
     observer.schedule(event_handler, path)
     observer.start()
+
 
 
 def sensorDataProcessAndSaveToCSVTask(lock):
@@ -170,7 +175,6 @@ threading.Thread(target=sensorDataProcessAndSaveToCSVTask,
                  args=(lock,)).start()
 startWebServerWatchDog()
 
-isNodeEnabledList = configureNodes()
 while (1):
     userInString = input()
     for i, node in enumerate(nodes):
@@ -178,10 +182,11 @@ while (1):
             continue
         if userInString == ("CALIB" + str(i+1)):
             guardFunctionWithLockAndPin(i, node.calibrationMain)
+            printCommandGuide()
         if userInString == ("CONFIG" + str(i+1)):
             guardFunctionWithLockAndPin(i, node.configurationMain)
+            printCommandGuide()
     if userInString == "NODE":
         lock.acquire()
         isNodeEnabledList = configureNodes()
         lock.release()
-    printCommandGuide()
