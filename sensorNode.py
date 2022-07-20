@@ -229,36 +229,33 @@ class SensorNode:
 
 
     def parseSerialInSensorData(self, serialInString):
-        @dataclass
-        class sensor:
-            name: str
-            value: float
-            unit: str
-        sensors = []
         if not serialInString.startswith("Data#"):
             print("Failed to receive data (invalid format or exceeds 60 seconds timeout)...")
             return
         names = re.findall("([A-z]+):", serialInString)
         values = re.findall(":([-.:0-9]+)\s", serialInString)  # parsing using regex
         units = re.findall("([A-z/\s]+);", serialInString)
-        readTime = values[0]
-        temperature = values[1]
-        for i in range(2, len(values)):
-            sensors.append(sensor(names[i], values[i], units[i]))
-        print("Reading time: " + readTime)
-        print("Temperature: " + temperature + " ^C")
-        data = [readTime, temperature]
-        for i, sen in enumerate(sensors):
-            print(sen.name + ":", str(sen.value) + sen.unit, sep = " ")
-            data.append(sen.value)
-            if (sen.name == "EC"):
-                names.insert(i+3, "TSS")
-                TSS = round(float(sen.value)*0.123*1000 - 41.593, 2)
-                print("Calculated TSS from EC: " + str(TSS) + " mg/L")
-                data.append(str(TSS))
+        for i, value in enumerate(values):
+            print(names[i] + ":", values[i] + units[i], sep = " ")
+            if i < 2:
+                continue
+            if (names[i] == "EC"):
+                TSS = round(float(values[i])*0.123*1000 - 41.593, 2)
+                print("Calculated TSS from EC")
+                names.insert(i+1, "TSS")
+                values.insert(i+1, str(TSS))
+                units.insert(i+1, "mg/L")
+            safeLimitSwitcher = {
+                "PH": 9.0,
+                "TSS": 45.0,
+                "NH3-N": 8.0
+            }
+            safeLimit = safeLimitSwitcher.get(names[i])
+            if float(values[i]) > safeLimit:
+                print("WARNING!!! " + names[i] + " EXCEEDS SAFE LIMIT!")
         names.insert(0, "Date")
-        data.insert(0, time.strftime("%d/%m/%Y", time.localtime()))
-        return names, data
+        values.insert(0, time.strftime("%d/%m/%Y", time.localtime()))
+        return names, values
 
     def saveSensorDataToCSV(self, names, data):
         try:
