@@ -33,7 +33,7 @@ for i, serialDirectory in enumerate(serialDirectories):
 
 
 def readNodesConfigFromCSV():
-    fileName = "sensor_nodes_config.csv"
+    fileName = "nodes.csv"
     header = ["Node1", "Node2"]
     defaultValue = [1, 1]
     with open(fileName, 'a+') as file:
@@ -76,7 +76,7 @@ def inputNewNodesConfigFromUser(isNodeEnabledList):
 
 
 def saveNewNodesConfigToCSV(isNodeEnabledList):
-    fileName = "sensor_nodes_config.csv"
+    fileName = "nodes.csv"
     header = ["Node1", "Node2"]
     with open(fileName, 'w', newline='') as file:
         writer = csv.writer(file)
@@ -157,7 +157,7 @@ def startWebServerWatchDog():
 
 
 def sensorDataProcessAndSaveToCSVTask(lock):
-    DATA_REQUEST_INTERVAL = 60
+    DATA_REQUEST_INTERVAL = 3600
     timepoint = time.time() - DATA_REQUEST_INTERVAL
     while(1):
         if (time.time() - timepoint > DATA_REQUEST_INTERVAL):
